@@ -21,10 +21,14 @@ package org.darkstar.batch;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.darkstar.batch.utils.DarkstarUtils;
 
@@ -45,7 +49,8 @@ import org.darkstar.batch.utils.DarkstarUtils;
 public class NpcIdUpdate {
 
 	private static final Logger LOG = Logger.getLogger(NpcIdUpdate.class);
-	
+		
+	private Map<String,Integer> keyCountMap;
 	private Properties configProperties;
 	private Properties mappingProperties;
 	private Properties npcIdShiftProperties;
@@ -64,12 +69,13 @@ public class NpcIdUpdate {
 	/**
 	 * Main Loop for Generating the Mapping File
 	 */
-	private void updateNpcIds(){
+	private void updateNpcIds(){	
 		configProperties = DarkstarUtils.loadBatchConfiguration();
+		keyCountMap = new HashMap<>();
 		mappingProperties = DarkstarUtils.loadMappingProperties(configProperties);
 		markGuesses = Boolean.valueOf(configProperties.getProperty("npcIdMarkGuesses","false"));
 		npcIdShiftProperties = new Properties();
-
+		
 		final int minZone = Integer.valueOf(configProperties.getProperty("minZoneId", "0"));
 		final int maxZone = Integer.valueOf(configProperties.getProperty("maxZoneId", "255"));
 
@@ -133,6 +139,9 @@ public class NpcIdUpdate {
 		// Keep track of the shift trend
 		int shiftTrend = 0;
 		
+		// Keep track of ids already used
+		final List<Integer> alreadyUsedList = new ArrayList<>();
+		
 		// Loop Through Npcs		
 		for(int lineIndex = zoneStartingLine; lineIndex < npcListSqlLines.size(); lineIndex++) {
 			try{
@@ -155,25 +164,30 @@ public class NpcIdUpdate {
 				
 				// If we can't find the npc at all, we'll reference the mapping file.
 				if(!DarkstarUtils.isCurrentNpcNameInPolUtilsMobList(polUtilsMobListString, npcName)){
-					npcName = mappingProperties.getProperty(DarkstarUtils.getMappingKey(zoneId, npcName), npcName);				
-				}
+					npcName = mappingProperties.getProperty(DarkstarUtils.getMappingKey(keyCountMap, zoneId, npcName), npcName);
+				}		
 				
+				// Adjust for blanks and csnpcs if still necessary
+				if("blank".equalsIgnoreCase(npcName) || "csnpc".equalsIgnoreCase(npcName)){
+					npcName = "";
+				}
+								
 				// If we still can't find it, we have to guess best off the current trend.
-				if(!DarkstarUtils.isCurrentNpcNameInPolUtilsMobList(polUtilsMobListString, npcName)){											
+				if(!DarkstarUtils.isCurrentNpcNameInPolUtilsMobList(polUtilsMobListString, npcName) && !StringUtils.isWhitespace(npcName.trim())){
 					final int shiftedId = DarkstarUtils.convertPolUtilsNpcIdToDarkstar(shiftedPolUtilsId);					
 
 					if(npcId==shiftedId){
 						LOG.info(String.format("Pre-Scan: Unable To Locate Npc Name <%s>, Shift Trend is <0> so we're leaving it alone!", npcName));
 					}
 					else {
-						LOG.info(String.format("Pre-Scan: Unable To Locate Npc Name <%s>, Using Trend Shift <%d>: %d -> %d", npcName, shiftTrend, npcId, shiftedId));
-						npcIdShiftProperties.setProperty(String.valueOf(polUtilsNpcId),String.valueOf(shiftedPolUtilsId));
+						LOG.info(String.format("Pre-Scan: Unable To Locate Npc Name <%s>, Using Trend Shift <%d>: %d -> %d", npcName, shiftTrend, npcId, shiftedId));						
 						DarkstarUtils.replaceNpcId(npcListSqlLines, lineIndex, shiftedId);
 						guesses++;
 					}
+					alreadyUsedList.add(shiftedId);
 					continue;
 				}
-				
+
 				// We're gonna try looking up the ID with the offset of the current shifting 
 				// trend, and see if the name matches. If it does, we'll go with that.
 				// If it doesn't, we start scanning...				
@@ -181,7 +195,7 @@ public class NpcIdUpdate {
 				
 				// First Strategy is forward scanning off of the current shifting trend
 				LOG.debug("Starting Forward Scan...");
-				for(int scanningId = shiftedPolUtilsId; scanningId < (shiftedPolUtilsId+2); scanningId++){					
+				for(int scanningId = shiftedPolUtilsId; scanningId < (shiftedPolUtilsId+10); scanningId++){					
 					int scannedPolUtilsIndex = DarkstarUtils.findPolUtilsIndexById(polUtilsMobListString, scanningId);
 					String scannedPolUtilsNpcName = DarkstarUtils.findPolUtilsNpcNameById(polUtilsMobListString, scanningId, scannedPolUtilsIndex);
 
@@ -189,7 +203,8 @@ public class NpcIdUpdate {
 						continue;
 					}
 					
-					if(DarkstarUtils.isNpcNameAMatch(npcName, scannedPolUtilsNpcName)){
+					if(DarkstarUtils.isNpcNameAMatch(npcName, scannedPolUtilsNpcName) && 
+							!alreadyUsedList.contains(DarkstarUtils.convertPolUtilsNpcIdToDarkstar(scanningId))){
 						polUtilsNpcName = scannedPolUtilsNpcName;
 						shiftedPolUtilsId = scanningId;
 						break;
@@ -199,7 +214,7 @@ public class NpcIdUpdate {
 				// If that doesn't work, we'll scan backwards. Occasionally this happens when there are jumps between sequential ids, and the zone stopped shifting at that point.
 				LOG.debug("Starting Backward Scan...");
 				if(polUtilsNpcName == null){					
-					for(int scanningId = shiftedPolUtilsId; scanningId > (shiftedPolUtilsId-2); scanningId--){
+					for(int scanningId = (shiftedPolUtilsId - 10); scanningId < shiftedPolUtilsId; scanningId++){
 						int scannedPolUtilsIndex = DarkstarUtils.findPolUtilsIndexById(polUtilsMobListString, scanningId);
 						String scannedPolUtilsNpcName = DarkstarUtils.findPolUtilsNpcNameById(polUtilsMobListString, scanningId, scannedPolUtilsIndex);
 						
@@ -207,7 +222,8 @@ public class NpcIdUpdate {
 							continue;
 						}
 						
-						if(DarkstarUtils.isNpcNameAMatch(npcName, scannedPolUtilsNpcName)){
+						if(DarkstarUtils.isNpcNameAMatch(npcName, scannedPolUtilsNpcName) && 
+								!alreadyUsedList.contains(DarkstarUtils.convertPolUtilsNpcIdToDarkstar(scanningId))){
 							polUtilsNpcName = scannedPolUtilsNpcName;
 							shiftedPolUtilsId = scanningId;
 							break;
@@ -221,13 +237,14 @@ public class NpcIdUpdate {
 				
 				// If it ended up the same, leave it alone to avoid log spam
 				if(npcId==shiftedId){
+					alreadyUsedList.add(shiftedId);
 					continue;
 				}
 				// If we haven't found it we'll have to guess...				
 				else if(polUtilsNpcName==null){				
 					LOG.info(String.format("Post-Scan: Unable To Locate Npc Name <%s>, Using Trend Shift <%d>: %d -> %d", npcName, shiftTrend, npcId, shiftedId));
-					npcIdShiftProperties.setProperty(String.valueOf(polUtilsNpcId),String.valueOf(shiftedPolUtilsId));
 					DarkstarUtils.replaceNpcId(npcListSqlLines, lineIndex, shiftedId);
+					alreadyUsedList.add(shiftedId);
 					guesses++;
 					continue;
 				}
@@ -235,7 +252,8 @@ public class NpcIdUpdate {
 				else {
 					LOG.info(String.format("Matched: Npc Name <%s>, %d -> %d", npcName, npcId, shiftedId));
 					npcIdShiftProperties.setProperty(String.valueOf(polUtilsNpcId),String.valueOf(shiftedPolUtilsId));
-					DarkstarUtils.replaceNpcId(npcListSqlLines, lineIndex, shiftedId);					
+					DarkstarUtils.replaceNpcId(npcListSqlLines, lineIndex, shiftedId);
+					alreadyUsedList.add(shiftedId);
 				}
 			}
 			catch(Exception e){

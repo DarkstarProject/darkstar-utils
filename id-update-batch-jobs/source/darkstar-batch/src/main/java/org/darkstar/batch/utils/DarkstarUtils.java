@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.TreeSet;
@@ -15,6 +16,7 @@ import java.util.TreeSet;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringEscapeUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
 /** 
@@ -40,16 +42,16 @@ import org.apache.log4j.Logger;
  * Utility Methods for the Darkstar Batch Processes
  */
 public class DarkstarUtils {
-	public static final Logger LOG = Logger.getLogger(DarkstarUtils.class);
+	private static List<String> badCharacterDataLines;
 	
+	public static final String FIELD_CLOSING_TAG = "</field>";
 	public static final String FIELD_ID_OPENING_TAG = "<field name=\"id\">";
 	public static final String FIELD_INDEX_OPENING_TAG = "<field name=\"index\">";
 	public static final String FIELD_NAME_OPENING_TAG = "<field name=\"name\">";
-	public static final String FIELD_CLOSING_TAG = "</field>";
 	public static final String FIX_ME = "FIXME: ";
-	public static final String NPC_LIST_INSERT_START = "INSERT INTO `npc_list` VALUES (";
+	public static final Logger LOG = Logger.getLogger(DarkstarUtils.class);
 	
-	private static List<String> badCharacterDataLines;
+	public static final String NPC_LIST_INSERT_START = "INSERT INTO `npc_list` VALUES (";
 		
 	/**
 	 * Method to Collapse a String into one line, and Format It By Removing Escaped Characters
@@ -247,12 +249,33 @@ public class DarkstarUtils {
 	 * @param npcName Npc Name
 	 * @return Mapping File Key
 	 */
-	public static String getMappingKey(final int zoneId, final String npcName){
+	public static String getMappingKey(final Map<String,Integer> keyCountMap, 
+			final int zoneId, final String npcName){
 		final StringBuilder mappingKeyBuilder = new StringBuilder();
 		mappingKeyBuilder.append(String.format("%03d",zoneId));
 		mappingKeyBuilder.append('|');
 		mappingKeyBuilder.append(npcName);
-		return mappingKeyBuilder.toString();
+		
+		final String keyWithoutCount = mappingKeyBuilder.toString();
+		Integer keyCount = keyCountMap.get(keyWithoutCount);
+		
+		if(keyCount==null){
+			keyCount = 1;
+		}
+		else {
+			keyCount++;
+		}
+		
+		mappingKeyBuilder.append('|');
+		mappingKeyBuilder.append(keyCount);
+		
+		keyCountMap.put(keyWithoutCount, keyCount);
+				
+		final String mappingKey = mappingKeyBuilder.toString();
+		
+		LOG.debug(String.format("getMappingKey: %s", mappingKey));
+		
+		return mappingKey;
 	}
 	
 	/**
@@ -381,6 +404,10 @@ public class DarkstarUtils {
 			if(newNpcName.equals(npcNameNoUnderscore)){
 				isNameAMatch = true;
 			}
+			else if(StringUtils.isWhitespace(originalNpcName.replaceAll("("+System.getProperty("line.separator")+")", " ").trim()) && 
+					StringUtils.isWhitespace(newNpcName.replaceAll("("+System.getProperty("line.separator")+")", " ").trim())){
+				isNameAMatch = true;
+			}
 		}
 				
 		return isNameAMatch;		
@@ -451,8 +478,8 @@ public class DarkstarUtils {
 		}
 		
 		return config;
-	}
-
+	}	
+			
 	/**
 	 * Method to Load the Npc Id Mapping Properties
 	 * @return Mapping Properties
@@ -462,13 +489,13 @@ public class DarkstarUtils {
 			private static final long serialVersionUID = 665397466355935210L;
 
 		    @Override
-		    public Set<Object> keySet(){
-		        return Collections.unmodifiableSet(new TreeSet<Object>(super.keySet()));
+		    public synchronized Enumeration<Object> keys() {
+		        return Collections.enumeration(new TreeSet<Object>(super.keySet()));
 		    }
 
 		    @Override
-		    public synchronized Enumeration<Object> keys() {
-		        return Collections.enumeration(new TreeSet<Object>(super.keySet()));
+		    public Set<Object> keySet(){
+		        return Collections.unmodifiableSet(new TreeSet<Object>(super.keySet()));
 		    }
 		};
 		
@@ -485,6 +512,31 @@ public class DarkstarUtils {
 		}
 		
 		return mappingProperties;
+	}
+
+	/**
+	 * Method to Load the Npc Id Shift Properties
+	 * @return Shift Properties
+	 */
+	public static Properties loadShiftProperties(final Properties configProperties){
+		final Properties shiftProperties = new Properties();
+		
+		try {
+			final File shiftFile = new File(configProperties.getProperty("shift_file","npcid-shift.properties"));
+			if(shiftFile.exists()){
+				final FileInputStream mappingStream = new FileInputStream(shiftFile);
+				shiftProperties.load(mappingStream);
+				IOUtils.closeQuietly(mappingStream);				
+			}
+			
+			// Shift Properties are 1 time use.
+			shiftFile.deleteOnExit();
+		}
+		catch(final Exception e){
+			throw new RuntimeException("Error Reading Mapping File!",e);
+		}
+		
+		return shiftProperties;
 	}	
 	
 	/**

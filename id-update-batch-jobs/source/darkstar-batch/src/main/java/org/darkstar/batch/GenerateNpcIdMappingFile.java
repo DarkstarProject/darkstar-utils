@@ -21,7 +21,9 @@ package org.darkstar.batch;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
@@ -50,8 +52,9 @@ public class GenerateNpcIdMappingFile {
 
 	private static final Logger LOG = Logger.getLogger(GenerateNpcIdMappingFile.class);
 
+	private Map<String,Integer> keyCountMap;
 	private Properties configProperties;
-	private Properties mappingProperties;
+	private Properties mappingProperties;	
 	private int errors = 0;
 
 	/**
@@ -68,6 +71,7 @@ public class GenerateNpcIdMappingFile {
 	private void generateNpcIdMappingFile(){
 		configProperties = DarkstarUtils.loadBatchConfiguration();
 		mappingProperties = DarkstarUtils.loadMappingProperties(configProperties);
+		keyCountMap = new HashMap<>();
 
 		final int minZone = Integer.valueOf(configProperties.getProperty("minZoneId", "0"));
 		final int maxZone = Integer.valueOf(configProperties.getProperty("maxZoneId", "255"));
@@ -154,7 +158,7 @@ public class GenerateNpcIdMappingFile {
 					}
 
 					LOG.info(String.format("Darkstar Npc Name <%s> -> POLUtils Npc Name <%s>",npcName, polUtilsNpcName));
-					mappingProperties.setProperty(DarkstarUtils.getMappingKey(zoneId, npcName), polUtilsNpcName);
+					mappingProperties.setProperty(DarkstarUtils.getMappingKey(keyCountMap, zoneId, npcName), polUtilsNpcName);
 				}
 			}
 			catch(Exception e){

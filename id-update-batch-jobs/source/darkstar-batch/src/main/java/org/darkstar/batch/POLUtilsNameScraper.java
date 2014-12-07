@@ -21,9 +21,7 @@ package org.darkstar.batch;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
@@ -31,47 +29,37 @@ import org.apache.log4j.Logger;
 import org.darkstar.batch.utils.DarkstarUtils;
 
 /**
- * Batch Class to Generate a Mapping File Between Darkstar SQL & POLUtils
+ * Scrapes Latest POLUtils Names
  * 
- * For this to work properly in its entirety, we must be in a known good state.
+ * Requires a POLUtils Dump
  * 
- * This is necessary in order to be able to attempt to automate NPCs where our name
- * in the SQL does not match the name given in POLUtils.
- * 
- * Once we have a proper mapping, it will allow the other batch jobs to autofix these
- * cases
- * 
- * If a mapping is bad because we are currently in a bad state, it will not be able to
- * fix the problem, but should not make it worse either.
- * 
- * As we manually fix these cases in the npc_list, we should rerun this job to regenerate
- * the batch file until we are in a completely good state.
- * 
+ * Requires the ids to be in sync already, or you'll get incorrect results.
  */
-public class GenerateNpcIdMappingFile {
+public class POLUtilsNameScraper {
 
-	private static final Logger LOG = Logger.getLogger(GenerateNpcIdMappingFile.class);
+	private static final Logger LOG = Logger.getLogger(POLUtilsNameScraper.class);
 
-	private Map<String,Integer> keyCountMap;
 	private Properties configProperties;
-	private Properties mappingProperties;	
+	private Properties npcIdShiftProperties;
 	private int errors = 0;
+	private int guesses = 0;	
+	private boolean markGuesses;
 
 	/**
-	 * GenerateNpcIdMappingFile - Batch Entry Point
+	 * NpcIdUpdate - Batch Entry Point
 	 */
 	public static void main(String[] args) {
-		final GenerateNpcIdMappingFile generateNpcIdMappingFile = new GenerateNpcIdMappingFile();
-		generateNpcIdMappingFile.generateNpcIdMappingFile();
+		final POLUtilsNameScraper polutilsNameScraper = new POLUtilsNameScraper();
+		polutilsNameScraper.updatePOLUtilsNames();
 	}
 
 	/**
 	 * Main Loop for Generating the Mapping File
 	 */
-	private void generateNpcIdMappingFile(){
+	private void updatePOLUtilsNames(){	
 		configProperties = DarkstarUtils.loadBatchConfiguration();
-		mappingProperties = DarkstarUtils.loadMappingProperties(configProperties);
-		keyCountMap = new HashMap<>();
+		markGuesses = Boolean.valueOf(configProperties.getProperty("npcIdMarkGuesses","false"));
+		npcIdShiftProperties = new Properties();
 
 		final int minZone = Integer.valueOf(configProperties.getProperty("minZoneId", "0"));
 		final int maxZone = Integer.valueOf(configProperties.getProperty("maxZoneId", "255"));
@@ -87,20 +75,27 @@ public class GenerateNpcIdMappingFile {
 			}
 			else {
 				LOG.info(String.format("Processing Zone ID <%d>...", zoneId));
-				generateMappingForZone(npcListSqlLines, polUtilsMobListFilePath, zoneId, zoneNameComment);
+				updateNpcIdsForZone(npcListSqlLines, polUtilsMobListFilePath, zoneId, zoneNameComment);
 			}
 		}
 
-		DarkstarUtils.saveMappingProperties(configProperties, mappingProperties);
-		
+		LOG.info(String.format("A Total of <%d> Guesses Occurred.", guesses));
+
+		if(markGuesses){
+			LOG.info("Guesses are marked with \"FIXME:\" in the SQL. Please search for and fix these before committing.");	
+		}
+
 		LOG.info(String.format("A Total of <%d> Unhandled Errors Occurred.", errors));
+
+		DarkstarUtils.saveNpcListSqlFile(configProperties, npcListSqlLines);
+		DarkstarUtils.saveNpcIdShiftProperties(configProperties, npcIdShiftProperties);
 	}
 
 	/**
-	 * Logic to Generate Mappings for a Single Zone
+	 * Logic to Update Npc Ids for a Single Zone
 	 */
-	private void generateMappingForZone(final List<String> npcListSqlLines, final String polUtilsMobListFilePath, final int zoneId, final String zoneNameComment){
-		// We find the zone by scanning for the Zone Comment in NPC_LIST Sql. The comment value mappingng is configured in the batch properties
+	private void updateNpcIdsForZone(final List<String> npcListSqlLines, final String polUtilsMobListFilePath, final int zoneId, final String zoneNameComment){
+		// We find the zone by scanning for the Zone Comment in NPC_LIST Sql. The comment value mapping is configured in the batch properties
 		final int zoneStartingLine = DarkstarUtils.findZoneInNpcListSql(zoneNameComment, npcListSqlLines);
 
 		if(zoneStartingLine == -1){
@@ -110,56 +105,47 @@ public class GenerateNpcIdMappingFile {
 
 		// Read in Relevant Pol Utils File to Match With
 		final File polUtilsMobListFile = new File(polUtilsMobListFilePath);
-		String polUtilsMobListString;
+		String polUtilsMobListString ="";
 
 		try {
 			polUtilsMobListString = FileUtils.readFileToString(polUtilsMobListFile, "UTF-8");
+			polUtilsMobListString = DarkstarUtils.collapseAndFormatXmlString(polUtilsMobListString);
 		} 
 		catch (final IOException e) {
 			LOG.error(String.format("Error Reading Mob List for Zone <%s>, Skipping...", zoneNameComment), e);
 			errors++;
-			return;
 		}
 
-		polUtilsMobListString = DarkstarUtils.collapseAndFormatXmlString(polUtilsMobListString);
-
 		// Capture Hex Prefix for the Zone, Used in Matching Our Ids to POLUtils
-		final String polUtilsHexPrefix = DarkstarUtils.findPolUtilsNpcHexPrefix(polUtilsMobListString);
+		String npcNewValueHexString = Integer.toHexString((zoneId << 12) + 0x1000000);
+		npcNewValueHexString = npcNewValueHexString.substring(0,npcNewValueHexString.length()-3);
 
-		// Loop Through Npcs
+		// Loop Through Npcs		
 		for(int lineIndex = zoneStartingLine; lineIndex < npcListSqlLines.size(); lineIndex++) {
 			try{
 				String npcListSqlLine = npcListSqlLines.get(lineIndex);
 
 				LOG.debug(String.format("Processing Line: %s", npcListSqlLine));
 
-				if(npcListSqlLine.indexOf("-- -")>=0){
+				if(npcListSqlLine.indexOf("-- -----")>=0){
 					LOG.info(String.format("Finished <%s>: Zone Ended.",zoneNameComment));
 					break;
 				}
-
-				final String npcName = DarkstarUtils.findCurrentNpcNameInNpcList(npcListSqlLine);
-
-				if(npcName==null){
+				else if("".equals(npcListSqlLine.trim())){
 					continue;
 				}
-				else if(DarkstarUtils.isCurrentNpcNameInPolUtilsMobList(polUtilsMobListString, npcName)){
-					LOG.debug(String.format("No Mapping Necessary for <%s>", npcName));
+
+				if(npcListSqlLine.startsWith("--")){
 					continue;
 				}
-				else {
-					final int npcId = DarkstarUtils.findCurrentNpcIdInNpcList(npcListSqlLine);
-					final int polUtilsNpcId = DarkstarUtils.reconstructPolUtilsNpcId(polUtilsHexPrefix, npcId);
-					final String polUtilsNpcName = DarkstarUtils.findPolUtilsNpcNameById(polUtilsMobListString, polUtilsNpcId);
-
-					if(polUtilsNpcName==null){
-						LOG.info(String.format("Failed to Match <%d> (%d), Skipping...", npcId, polUtilsNpcId));
-						continue;
-					}
-
-					LOG.info(String.format("Darkstar Npc Name <%s> -> POLUtils Npc Name <%s>",npcName, polUtilsNpcName));
-					mappingProperties.setProperty(DarkstarUtils.getMappingKey(keyCountMap, zoneId, npcName), polUtilsNpcName);
+				
+				if(npcListSqlLine.indexOf(DarkstarUtils.NPC_LIST_INSERT_START)<0){
+					continue;
 				}
+
+				final int npcId = DarkstarUtils.findCurrentNpcIdInNpcList(npcListSqlLine);
+				String polUtilsName = DarkstarUtils.findPolUtilsNpcNameById(polUtilsMobListString, npcId);
+				DarkstarUtils.replacePolUtilsName(npcListSqlLines, lineIndex, polUtilsName);
 			}
 			catch(Exception e){
 				LOG.error(String.format("Exception Thrown While Processing Npc Ids In Zone <%s>", zoneNameComment), e);
@@ -168,3 +154,4 @@ public class GenerateNpcIdMappingFile {
 		}
 	}
 }
+

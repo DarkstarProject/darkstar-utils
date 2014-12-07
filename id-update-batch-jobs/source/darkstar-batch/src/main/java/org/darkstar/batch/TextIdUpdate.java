@@ -72,9 +72,14 @@ public class TextIdUpdate {
 	 * @param args
 	 * @throws IOException 
 	 */
-	public static void main(String[] args) throws IOException {		
-		final TextIdUpdate textIdUpdate = new TextIdUpdate();
-		textIdUpdate.updateTextIds();
+	public static void main(String[] args) throws IOException {
+		try {
+			final TextIdUpdate textIdUpdate = new TextIdUpdate();
+			textIdUpdate.updateTextIds();
+		}
+		catch(final Exception e){
+			LOG.error("Error Updating Text IDs",e);
+		}
 	}
 	
 	/**
@@ -172,23 +177,38 @@ public class TextIdUpdate {
 			String textIdLine =  textIdLines.get(lineIndex);
 			
 			// If we don't have all 3 of these markers on a line, then the line is not a text id definition.
-			if(textIdLine.indexOf("=")==-1 || textIdLine.indexOf(";")==-1 || textIdLine.indexOf("--")==-1) {  
+			if(textIdLine.indexOf("=")==-1 || textIdLine.indexOf(";")==-1) {  
 				continue; 
 			}
+			
+			String comment = "";
 			
 			// Search for Markers on this Line
 			final int lineEqual = textIdLine.indexOf("=");
 			final int semiColon = textIdLine.indexOf(";", lineEqual);
-			final int commentIndex = textIdLine.indexOf("--");
 			
 			// Capture the Comment
 			final String variable = textIdLine.substring(0,lineEqual).trim();
 			
 			// Capture the Current Id
-			final int id = Integer.valueOf(textIdLine.substring(lineEqual+1,semiColon).trim());			
-					
-			// Capture the Comment			
-			final String comment = textIdLine.substring(commentIndex+2).trim();
+			final int id = Integer.valueOf(textIdLine.substring(lineEqual+1,semiColon).trim());
+			
+			boolean appendComment = false;
+			
+			if(textIdLine.indexOf("--")>=0){				
+				final int commentIndex = textIdLine.indexOf("--");
+				// 	Capture the Comment			
+				comment = textIdLine.substring(commentIndex+2).trim();
+			}
+			else {
+				comment = configProperties.getProperty(variable);
+				if(comment==null){
+					comment = "@UNKNOWN_GLOBAL@";
+				}
+				else {
+					appendComment = true;
+				}
+			}
 			
 			// Ignore Unknowns & Current ID 0's
 			if("??? message".equals(comment) || "[UNKNOWN]".equals(comment) || id==0){
@@ -266,17 +286,14 @@ public class TextIdUpdate {
 					guess = false;
 					LOG.debug(String.format("%s: %d -> %d, Same Id Detected, Leaving it alone...", variable, id, fieldValue));
 				}
-				// If its shifted too much, mark it for manual review if we're marking guesses in case something weird happened
-				else if(markGuesses && (Math.abs(fieldValue - id) > 10)){
-					textIdLine.replaceAll("("+id+")", String.valueOf(fieldValue));					
-					textIdLine = DarkstarUtils.FIX_ME + textIdLine;
-					textIdLines.set(lineIndex, textIdLine);
-					LOG.info(String.format("%s: %d -> %d, Large Change Detected, Marking for Manual Review With FIXME...", variable, id, fieldValue));
-					guess = true;
-				}
 				// Update it
 				else {
 					textIdLine = textIdLine.replaceAll("("+id+")", String.valueOf(fieldValue));
+					
+					if(appendComment){
+						textIdLine = textIdLine + " -- " + comment;
+					}
+					
 					textIdLines.set(lineIndex, textIdLine);
 					LOG.info(String.format("%s: %d -> %d", variable, id, fieldValue));
 				}

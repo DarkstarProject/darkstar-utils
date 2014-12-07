@@ -102,14 +102,10 @@ public class DarkstarUtils {
 	 * @return Short Darkstar Npc Id of the Npc on this Line
 	 */
 	public static int findCurrentNpcIdInNpcList(final String npcListSqlLine){		
-		if(npcListSqlLine.startsWith("--")){
-			return -1;
-		}
-		
 		final int insertIndex = npcListSqlLine.indexOf(NPC_LIST_INSERT_START);
 		
-		if(insertIndex == -1){
-			return insertIndex;
+		if(insertIndex == -1 || npcListSqlLine.startsWith("--")){
+			return -1;
 		}
 		
 		final int endIndex = npcListSqlLine.indexOf(",", insertIndex);
@@ -134,10 +130,17 @@ public class DarkstarUtils {
 			return null;
 		}
 		
-		final int endIndex = npcListSqlLine.indexOf(",", insertIndex);
+		int endIndex = npcListSqlLine.indexOf(",", insertIndex);
+		endIndex = npcListSqlLine.indexOf(",", endIndex+1);
 		final int npcNameStartIndex = npcListSqlLine.indexOf("'",endIndex);
-		final int npcNameEndIndex = npcListSqlLine.indexOf("'",npcNameStartIndex+1);
-		return npcListSqlLine.substring(npcNameStartIndex+1, npcNameEndIndex);
+		int npcNameEndIndex = npcListSqlLine.indexOf("'",npcNameStartIndex+1);
+		
+		if(npcListSqlLine.charAt(npcNameEndIndex-1) == '\\'){
+			npcNameEndIndex = npcListSqlLine.indexOf("'",npcNameEndIndex+1);
+		}
+		
+		final String name = npcListSqlLine.substring(npcNameStartIndex+1, npcNameEndIndex);
+		return name.replaceAll("\\\\\'","'");
 	}
 	
 	/**
@@ -148,23 +151,6 @@ public class DarkstarUtils {
 	 */
 	public static int findPolUtilsIndexById(final String polUtilsMobListString, final int polUtilsNpcId){
 		return polUtilsMobListString.indexOf(String.valueOf(polUtilsNpcId));
-	}
-	
-	/**
-	 * Method to Find the POLUtils Hex Prefix
-	 * @param polUtilsMobListString String Representation of the Mob List File
-	 * @return Hex Prefix
-	 */
-	public static String findPolUtilsNpcHexPrefix(final String polUtilsMobListString){
-		final int polutilsNpcStartIndex = polUtilsMobListString.lastIndexOf(FIELD_ID_OPENING_TAG);
-		final int polutilsNpcEndIndex = polUtilsMobListString.indexOf(FIELD_CLOSING_TAG, polutilsNpcStartIndex);
-		Integer npcNewValue = Integer.valueOf(polUtilsMobListString.substring(polutilsNpcStartIndex+FIELD_ID_OPENING_TAG.length(), polutilsNpcEndIndex));
-		LOG.debug("findPolUtilsNpcHexPrefix: NPC POLUtils: "+npcNewValue);
-		String npcNewValueHexString = Integer.toHexString(npcNewValue);
-		LOG.debug("findPolUtilsNpcHexPrefix: NPC Hex: "+npcNewValueHexString);
-		final String npcHexPrefix = npcNewValueHexString.substring(0,npcNewValueHexString.length()-3);
-		LOG.info("findPolUtilsNpcHexPrefix: NPC Hex Prefix: "+npcHexPrefix);
-		return npcHexPrefix;
 	}
 
 	/**
@@ -189,7 +175,7 @@ public class DarkstarUtils {
 		final int nameIndex = polUtilsMobListString.indexOf(String.valueOf(npcId), lastIndex);
 		
 		if(nameIndex==-1){
-			return null;
+			return "";
 		}
 		
 		final int nameStartIndex = polUtilsMobListString.indexOf(FIELD_NAME_OPENING_TAG, nameIndex);
@@ -358,62 +344,6 @@ public class DarkstarUtils {
 	}
 	
 	/**
-	 * Method to Determine If A Given NPC's Name Exists in the POLUtils File
-	 * @param polUtilsMobListString String Representation of the Mob List File
-	 * @param npcName Npc Name to Search
-	 * @return TRUE if it exists, FALSE otherwise
-	 */
-	public static boolean isCurrentNpcNameInPolUtilsMobList(final String polUtilsMobListString, final String npcName){
-		boolean isCurrentNpcNameFound = false;
-		
-		if(polUtilsMobListString.indexOf(npcName)>=0){
-			isCurrentNpcNameFound = true;
-		}
-		
-		// Replacing Fixing Space Vs. Underscore & Apostraphe Vs. Underscore is Enough for many cases. In this case we wouldn't bother mapping.
-		if(!isCurrentNpcNameFound){
-			String npcNameNoUnderscore = npcName.replaceAll("(_s_)","\\'s_");
-			npcNameNoUnderscore = npcNameNoUnderscore.replace('_',' ');
-			
-			if(polUtilsMobListString.indexOf(npcNameNoUnderscore)>=0){
-				isCurrentNpcNameFound = true;
-			}
-		}
-				
-		return isCurrentNpcNameFound;
-	}
-	
-	/**
-	 * Method to Check for a Match While Adjusting for _ & 's
-	 * @param originalNpcName Original NPC Name
-	 * @param newNpcName New NPC Name
-	 * @return TRUE if a match, FALSE otherwise.
-	 */
-	public static boolean isNpcNameAMatch(final String originalNpcName, final String newNpcName){
-		boolean isNameAMatch = false;
-		
-		if(newNpcName.equals(originalNpcName)){
-			isNameAMatch = true;
-		}
-		
-		// Replacing Fixing Space Vs. Underscore & Apostraphe Vs. Underscore is Enough for many cases. In this case we wouldn't bother mapping.
-		if(!isNameAMatch){
-			String npcNameNoUnderscore = originalNpcName.replaceAll("(_s_)","\\'s_");
-			npcNameNoUnderscore = npcNameNoUnderscore.replace('_',' ');
-			
-			if(newNpcName.equals(npcNameNoUnderscore)){
-				isNameAMatch = true;
-			}
-			else if(StringUtils.isWhitespace(originalNpcName.replaceAll("("+System.getProperty("line.separator")+")", " ").trim()) && 
-					StringUtils.isWhitespace(newNpcName.replaceAll("("+System.getProperty("line.separator")+")", " ").trim())){
-				isNameAMatch = true;
-			}
-		}
-				
-		return isNameAMatch;		
-	}
-	
-	/**
 	 * Checks if a Zone is Mapped in the Batch Config Properties
 	 * @param configProperties Handle to the Batch Config Properties
 	 * @param zoneId Zone ID
@@ -566,13 +496,48 @@ public class DarkstarUtils {
 	 * @param lineIndex Index of Current Line
 	 * @param newNpcId New Short NPC ID
 	 */
-	public static void replaceNpcId(final List<String> npcListSqlLines, final int lineIndex, final int newNpcId){
+	public static void replaceNpcId(final List<String> npcListSqlLines, final int lineIndex, final int newNpcId, final boolean markAsGuess){
 		final String npcIdLine = npcListSqlLines.get(lineIndex);
 		final int endIndex = npcIdLine.indexOf(",");
 		final String insertStringFragment = npcIdLine.substring(0, NPC_LIST_INSERT_START.length());
 		final String postIdFragment = npcIdLine.substring(endIndex, npcIdLine.length());
-		final String newNpcIdLine = insertStringFragment + newNpcId + postIdFragment;
+		String newNpcIdLine = insertStringFragment + newNpcId + postIdFragment;
+		
+		if(markAsGuess){
+			newNpcIdLine = "FIXME: "+newNpcIdLine;
+		}
+		
 		npcListSqlLines.set(lineIndex, newNpcIdLine);
+	}
+	
+	public static void replacePolUtilsName(final List<String> npcListSqlLines, final int lineIndex, final String name){
+		final String npcIdLine = npcListSqlLines.get(lineIndex);
+		
+		int startIndex = npcIdLine.indexOf(",");
+		startIndex = npcIdLine.indexOf(",", startIndex+1);
+		int nextQuote = npcIdLine.indexOf("'", startIndex+2);
+		int endIndex = npcIdLine.indexOf(",", startIndex+1);
+		
+		if(endIndex < nextQuote){
+			endIndex = npcIdLine.indexOf(",", endIndex+1);
+		}
+		
+		final String newLine;
+		
+		if(name==null){
+			newLine = npcIdLine.substring(0,startIndex+1) + "\'\'" + npcIdLine.substring(endIndex,npcIdLine.length());
+		}
+		else {
+			newLine = npcIdLine.substring(0,startIndex+1) + '\'' + name.replaceAll("'", "\\\\'") + '\'' + npcIdLine.substring(endIndex,npcIdLine.length());
+		}
+		
+		npcListSqlLines.set(lineIndex, newLine);
+	}
+	
+	public static void removeZoneId(final List<String> npcListSqlLines, final int lineIndex){
+		final String npcIdLine = npcListSqlLines.get(lineIndex);
+		final int startIndex = npcIdLine.lastIndexOf(",");
+		npcListSqlLines.set(lineIndex, npcIdLine.substring(0,startIndex)+");");
 	}
 	
 	/**

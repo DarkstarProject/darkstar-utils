@@ -38,6 +38,7 @@ import org.darkstar.batch.utils.DarkstarUtils;
 public class LuaScriptNpcIdUpdate {
 	
 	private static final Logger LOG = Logger.getLogger(LuaScriptNpcIdUpdate.class);
+	private int errors = 0;
 	
 	/**
 	 * LuaScriptIdUpdate - Batch Entry Point
@@ -60,7 +61,6 @@ public class LuaScriptNpcIdUpdate {
 		final File scriptsDirectory = new File(scriptsRoot);
 		final String[] extensions = new String[1];
 		extensions[0] = "lua";
-		int errors = 0;
 				
 		if(!scriptsDirectory.exists() || !scriptsDirectory.isDirectory()){
 			throw new RuntimeException(String.format("Cannot Find Scripts Directory! <%s>", scriptsRoot));
@@ -84,25 +84,42 @@ public class LuaScriptNpcIdUpdate {
 				
 		while(luaFiles.hasNext()){
 			final File luaFile = luaFiles.next();
-			
-			LOG.info(String.format("Updating <%s>", luaFile.getAbsolutePath()));
-			
-			try {
-				String luaFileContents = FileUtils.readFileToString(luaFile);
-				
-				for(final String shiftKey : shiftKeys){
-					luaFileContents = luaFileContents.replaceAll(String.format("(%s)", shiftKey), 
-							npcIdShiftProperties.getProperty(shiftKey));
-				}
-				
-				FileUtils.writeStringToFile(luaFile, luaFileContents, false);
-			} 
-			catch (final IOException e) {
-				errors++;
-				LOG.error(String.format("Failed to Update <%s>", luaFile.getAbsolutePath()), e);				
-			}			
+			updateFile(luaFile, shiftKeys, npcIdShiftProperties);
 		}
 		
+		final StringBuilder elevatorSqlPathBuilder = new StringBuilder();
+		elevatorSqlPathBuilder.append(configProperties.getProperty("darkstar_root",""));
+		elevatorSqlPathBuilder.append("sql/elevators.sql");
+		
+		final File elevatorFile = new File(elevatorSqlPathBuilder.toString());
+		updateFile(elevatorFile, shiftKeys, npcIdShiftProperties);
+		
+		final StringBuilder transportSqlPathBuilder = new StringBuilder();
+		transportSqlPathBuilder.append(configProperties.getProperty("darkstar_root",""));
+		transportSqlPathBuilder.append("sql/transport.sql");
+		
+		final File transportFile = new File(transportSqlPathBuilder.toString());
+		updateFile(transportFile, shiftKeys, npcIdShiftProperties);
+		
 		LOG.info(String.format("Finished Updating Lua Scripts With <%d> Errors!", errors));
+	}
+	
+	private void updateFile(final File luaFile, final List<String> shiftKeys, final Properties npcIdShiftProperties){
+		LOG.info(String.format("Updating <%s>", luaFile.getAbsolutePath()));
+		
+		try {
+			String luaFileContents = FileUtils.readFileToString(luaFile);
+			
+			for(final String shiftKey : shiftKeys){
+				luaFileContents = luaFileContents.replaceAll(String.format("(%s)", shiftKey), 
+						npcIdShiftProperties.getProperty(shiftKey));
+			}
+			
+			FileUtils.writeStringToFile(luaFile, luaFileContents, false);
+		} 
+		catch (final IOException e) {
+			errors++;
+			LOG.error(String.format("Failed to Update <%s>", luaFile.getAbsolutePath()), e);				
+		}
 	}
 }

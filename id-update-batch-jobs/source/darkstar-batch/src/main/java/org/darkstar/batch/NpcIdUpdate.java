@@ -165,8 +165,8 @@ public class NpcIdUpdate {
 					LOG.debug(String.format("Checking Current: %d (%s) -> %d (%s)", npcId, npcListPolUtilsName, npcId, polUtilsName));
 					
 					if(npcListPolUtilsName.equals(polUtilsName) && !alreadyUsedIds.contains(npcId)){
+						idToScan = npcId;
 						found = true;
-						break;
 					}
 				}
 				

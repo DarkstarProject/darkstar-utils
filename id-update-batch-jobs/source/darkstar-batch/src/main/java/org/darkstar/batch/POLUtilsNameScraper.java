@@ -40,7 +40,6 @@ public class POLUtilsNameScraper {
 	private static final Logger LOG = Logger.getLogger(POLUtilsNameScraper.class);
 
 	private Properties configProperties;
-	private Properties npcIdShiftProperties;
 	private int errors = 0;
 	private int guesses = 0;	
 	private boolean markGuesses;
@@ -59,7 +58,6 @@ public class POLUtilsNameScraper {
 	private void updatePOLUtilsNames(){	
 		configProperties = DarkstarUtils.loadBatchConfiguration();
 		markGuesses = Boolean.valueOf(configProperties.getProperty("npcIdMarkGuesses","false"));
-		npcIdShiftProperties = new Properties();
 
 		final int minZone = Integer.valueOf(configProperties.getProperty("minZoneId", "0"));
 		final int maxZone = Integer.valueOf(configProperties.getProperty("maxZoneId", "255"));
@@ -88,7 +86,6 @@ public class POLUtilsNameScraper {
 		LOG.info(String.format("A Total of <%d> Unhandled Errors Occurred.", errors));
 
 		DarkstarUtils.saveNpcListSqlFile(configProperties, npcListSqlLines);
-		DarkstarUtils.saveNpcIdShiftProperties(configProperties, npcIdShiftProperties);
 	}
 
 	/**

@@ -25,7 +25,7 @@ Build Requirements:
 
 Runtime Requirements:
 1) Java 8 JRE: http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
-2) POLUtils/MassExtractor: https://github.com/Windower/POLUtils
+2) POLUtils/MassExtractor: https://github.com/Windower/POLUtils/releases
 
 ==========================================
 = B) Building the Project

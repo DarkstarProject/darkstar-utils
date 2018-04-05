@@ -20,7 +20,7 @@ namespace ReviewBot
 
     class EnumEntry
     {
-        public string EnumName, EntryName, Comment;
+        public string EntryName, Comment;
         public long Id;
     }
 
@@ -96,7 +96,7 @@ namespace ReviewBot
                                 enumEntry.Comment = matches[2].Value;
                             if (matches.Count > 1)
                                 enumEntry.Id = long.Parse(matches[1].Value, NumberStyles.AllowHexSpecifier);
-                            enumEntry.EnumName = enumName;
+                            enumEntry.EntryName = matches[0].Value;
                         }
                         EnumDictionary[enumName][enumEntry.Id] = enumEntry;
                     }

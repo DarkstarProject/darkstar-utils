@@ -176,8 +176,8 @@ public class TextIdUpdate {
 		for(int lineIndex = 0; lineIndex < textIdLines.size(); lineIndex++) {
 			String textIdLine =  textIdLines.get(lineIndex);
 			
-			// If we don't have all 3 of these markers on a line, then the line is not a text id definition.
-			if(textIdLine.indexOf("=")==-1 || textIdLine.indexOf(";")==-1) {  
+			// If we don't have an equals sign with something after it, it's not an ID definition
+			if(textIdLine.indexOf("=")==-1 || (textIdLine.trim().indexOf("=") == textIdLine.trim().length() - 1)) {  
 				continue; 
 			}
 			

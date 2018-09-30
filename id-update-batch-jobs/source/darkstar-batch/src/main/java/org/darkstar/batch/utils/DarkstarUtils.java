@@ -326,7 +326,7 @@ public class DarkstarUtils {
 	public static String getTextIdFilePath(final Properties configProperties, final int zoneId){
 		final StringBuilder textIdPath = new StringBuilder();
 		textIdPath.append(getZonePath(configProperties, zoneId));
-		textIdPath.append("TextIDs.lua");
+		textIdPath.append("IDs.lua");
 		return textIdPath.toString();
 	}
 	

@@ -20,12 +20,12 @@ I) License Notices
 
 Build Requirements:
 1) Apache Maven: http://maven.apache.org/download.cgi
-2) Java 7 JDK: http://www.oracle.com/technetwork/java/javase/downloads/jdk7-downloads-1880260.html
-3) Optional: Eclipse w/ Maven Plugin
+2) Java 8 JDK: http://www.oracle.com/technetwork/java/javase/downloads/jdk8-downloads-2133151.html
+3) Optional: Eclipse Neon (Includes Maven) http://www.eclipse.org/neon/
 
 Runtime Requirements:
-1) Java 7 JRE: http://www.oracle.com/technetwork/java/javase/downloads/jre7-downloads-1880261.html
-2) POLUtils/MassExtractor: https://github.com/Windower/POLUtils/tree/master/Binaries
+1) Java 8 JRE: http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
+2) POLUtils/MassExtractor: https://github.com/Windower/POLUtils/releases
 
 ==========================================
 = B) Building the Project
@@ -33,7 +33,7 @@ Runtime Requirements:
 
 The Darkstar Batch Jobs are written in Java, and are built with Apache Maven, an industry standard
 build system for Java projects. In order to build the project, you will need both Apache Maven and
-the Java 7 JDK installed on your machine.
+the Java 8 JDK installed on your machine.
 
 Building from the Command Line:
 
